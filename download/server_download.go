@@ -3,7 +3,7 @@ package download
 import (
 	"encoding/json"
 	"fmt"
-	"mcserverlib/types"
+	"github.com/xDefyingGravity/gomcserver/types"
 	"net/url"
 	"os"
 	"path/filepath"
