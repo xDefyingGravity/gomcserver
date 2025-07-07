@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
+	"github.com/xDefyingGravity/gomcserver"
 	"io"
 	"time"
 )
 
 func main() {
-	myServer := NewServer("my_server", "1.21.5")
+	myServer := gomcserver.NewServer("my_server", "1.21.5")
 	myServer.AcceptEULA()
 
 	_, pw := io.Pipe()
@@ -28,7 +29,7 @@ func main() {
 
 	myServer.SetProperty("gamemode", "creative")
 
-	if err := myServer.Start(&StartOptions{
+	if err := myServer.Start(&gomcserver.StartOptions{
 		StdoutPipe: pw,
 		StderrPipe: io.Discard,
 	}); err != nil {
