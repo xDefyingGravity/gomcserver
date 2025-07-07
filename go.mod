@@ -1,4 +1,4 @@
-module mcserverlib
+module github.com/xDefyingGravity/gomcserver
 
 go 1.24
 
