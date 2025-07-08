@@ -379,8 +379,26 @@ func (s *Server) writeProperties() error {
 	if s.Props == nil {
 		return nil
 	}
+
 	propsFilePath := filepath.Join(s.Directory, "server.properties")
-	return os.WriteFile(propsFilePath, []byte(s.Props.String()), 0644)
+
+	existingProps := properties.NewProperties()
+	if data, err := os.ReadFile(propsFilePath); err == nil {
+		err = existingProps.Load(data, properties.UTF8)
+		if err != nil {
+			return fmt.Errorf("failed to load existing properties: %w", err)
+		}
+	}
+
+	for _, key := range s.Props.Keys() {
+		val, _ := s.Props.Get(key)
+		err := existingProps.SetValue(key, val)
+		if err != nil {
+			return err
+		}
+	}
+
+	return os.WriteFile(propsFilePath, []byte(existingProps.String()), 0644)
 }
 
 func (s *Server) listenToStdout(r io.Reader) {
