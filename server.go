@@ -165,15 +165,35 @@ func (s *Server) Stop() error {
 	if !s.running {
 		return errors.New("server is not running")
 	}
-	if s.cmd != nil && s.cmd.Process != nil {
-		if err := s.cmd.Process.Kill(); err != nil {
-			return fmt.Errorf("failed to stop server: %w", err)
-		}
-		s.running = false
-		s.pid = -1
-		return nil
+	if s.cmd == nil || s.cmd.Process == nil {
+		return errors.New("server process is not available")
 	}
-	return errors.New("server process is not available")
+
+	if err := s.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		return fmt.Errorf("failed to send SIGTERM: %w", err)
+	}
+
+	const maxWait = 30 * time.Second
+	const interval = 1 * time.Second
+	waited := time.Duration(0)
+
+	for waited < maxWait {
+		if err := s.cmd.Process.Signal(syscall.Signal(0)); err != nil {
+			s.running = false
+			s.pid = -1
+			return nil
+		}
+		time.Sleep(interval)
+		waited += interval
+	}
+
+	if err := s.cmd.Process.Kill(); err != nil {
+		return fmt.Errorf("failed to force kill server after timeout: %w", err)
+	}
+
+	s.running = false
+	s.pid = -1
+	return nil
 }
 
 // SendCommand sends a command to the server's stdin.
