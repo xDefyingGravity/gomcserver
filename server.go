@@ -585,7 +585,7 @@ func (s *Server) Backup(nonBlocking bool) error {
 	return nil
 }
 
-func SetMinMemoryMB(s *Server, minMemoryMB int) error {
+func (s *Server) SetMinMemoryMB(minMemoryMB int) error {
 	if minMemoryMB < 512 {
 		return fmt.Errorf("min memory must be at least 512 MB, got %d", minMemoryMB)
 	}
@@ -593,7 +593,7 @@ func SetMinMemoryMB(s *Server, minMemoryMB int) error {
 	return nil
 }
 
-func SetMaxMemoryMB(s *Server, maxMemoryMB int) error {
+func (s *Server) SetMaxMemoryMB(maxMemoryMB int) error {
 	if maxMemoryMB < s.MinMemoryMB {
 		return fmt.Errorf("max memory must be at least %d MB, got %d", s.MinMemoryMB, maxMemoryMB)
 	}
