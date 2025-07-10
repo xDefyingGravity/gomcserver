@@ -25,7 +25,8 @@ type Server struct {
 	Version      string
 	Directory    string
 	Port         int
-	MemoryMB     int
+	MinMemoryMB  int
+	MaxMemoryMB  int
 	Props        *properties.Properties
 	EULAAccepted bool
 	PlayerCount  int
@@ -47,6 +48,8 @@ type Server struct {
 
 // StartOptions configures how the server is started.
 type StartOptions struct {
+	JavaPath         *string
+	JvmOptions       *[]string
 	StdoutPipe       io.Writer
 	StderrPipe       io.Writer
 	UseManifestCache *bool
@@ -69,12 +72,13 @@ func NewServer(name, versionOrUrl string) *Server {
 	}
 
 	return &Server{
-		Version:   versionOrUrl,
-		Port:      25565,
-		MemoryMB:  2048,
-		Props:     properties.NewProperties(),
-		Directory: absDir,
-		signals:   make(chan os.Signal, 1),
+		Version:     versionOrUrl,
+		Port:        25565,
+		MinMemoryMB: 2048,
+		MaxMemoryMB: 4096,
+		Props:       properties.NewProperties(),
+		Directory:   absDir,
+		signals:     make(chan os.Signal, 1),
 	}
 }
 
@@ -297,7 +301,31 @@ func (s *Server) setupSignalHandlers(opts *StartOptions) {
 }
 
 func (s *Server) launchProcess(opts *StartOptions) error {
-	s.cmd = exec.Command("java", "-Xmx"+strconv.Itoa(s.MemoryMB)+"M", "-jar", "server.jar", "nogui")
+	if opts.JavaPath == nil {
+		javaPath, err := exec.LookPath("java")
+		if err != nil {
+			return fmt.Errorf("java executable not found: %w", err)
+		}
+		opts.JavaPath = &javaPath
+	}
+
+	if opts.JvmOptions == nil {
+		defaultJvmOptions := []string{
+			"-XX:+UseG1GC",
+			"-XX:+UnlockExperimentalVMOptions",
+			"-XX:+UseZGC",
+		}
+		opts.JvmOptions = &defaultJvmOptions
+	}
+
+	args := append(
+		*opts.JvmOptions,
+		"-Xms"+strconv.Itoa(s.MinMemoryMB)+"M",
+		"-Xmx"+strconv.Itoa(s.MaxMemoryMB)+"M",
+		"-jar", "server.jar", "nogui",
+	)
+
+	s.cmd = exec.Command(*opts.JavaPath, args...)
 	s.cmd.Dir = s.Directory
 
 	stdout, err := s.cmd.StdoutPipe()
@@ -347,28 +375,39 @@ func (s *Server) validateConfig() error {
 	if s.Directory == "" {
 		return errors.New("server directory is not set")
 	}
+
 	if s.Name == "" {
 		s.Name = s.generateServerName()
 	}
+
 	if s.Port < 1 || s.Port > 65535 {
 		return fmt.Errorf("port %d is out of range (1–65535)", s.Port)
 	}
+
+	if s.running {
+		return errors.New("server is already running")
+	}
+
+	if !s.EULAAccepted {
+		return errors.New("EULA not accepted")
+	}
+
 	totalMB, err := getTotalMemoryMB()
 	if err != nil {
 		return fmt.Errorf("failed to get total memory: %w", err)
 	}
-	if s.MemoryMB < 512 || s.MemoryMB > totalMB-512 {
-		return fmt.Errorf("memory %d MB is out of range (512–%d)", s.MemoryMB, totalMB-512)
+
+	if s.MinMemoryMB < 512 || s.MinMemoryMB > totalMB-512 {
+		return fmt.Errorf("min memory %d MB is out of range (512–%d)", s.MinMemoryMB, totalMB-512)
 	}
-	if s.MemoryMB%512 != 0 {
-		return fmt.Errorf("memory %d MB must be a multiple of 512", s.MemoryMB)
+	if s.MaxMemoryMB < s.MinMemoryMB || s.MaxMemoryMB > totalMB {
+		return fmt.Errorf("max memory %d MB must be at least %d MB and at most %d MB", s.MaxMemoryMB, s.MinMemoryMB, totalMB)
 	}
-	if !s.EULAAccepted {
-		return errors.New("EULA not accepted")
+
+	if s.MinMemoryMB%512 != 0 || s.MaxMemoryMB%512 != 0 {
+		return fmt.Errorf("memory values must be multiples of 512: min=%d, max=%d", s.MinMemoryMB, s.MaxMemoryMB)
 	}
-	if s.running {
-		return errors.New("server is already running")
-	}
+
 	return nil
 }
 
@@ -543,5 +582,21 @@ func (s *Server) Backup(nonBlocking bool) error {
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+func SetMinMemoryMB(s *Server, minMemoryMB int) error {
+	if minMemoryMB < 512 {
+		return fmt.Errorf("min memory must be at least 512 MB, got %d", minMemoryMB)
+	}
+	s.MinMemoryMB = minMemoryMB
+	return nil
+}
+
+func SetMaxMemoryMB(s *Server, maxMemoryMB int) error {
+	if maxMemoryMB < s.MinMemoryMB {
+		return fmt.Errorf("max memory must be at least %d MB, got %d", s.MinMemoryMB, maxMemoryMB)
+	}
+	s.MaxMemoryMB = maxMemoryMB
 	return nil
 }
