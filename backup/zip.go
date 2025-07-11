@@ -61,11 +61,12 @@ func createBackupTar(src, dest string) error {
 			return nil
 		}
 
-		header, err := tar.FileInfoHeader(info, path)
+		header, err := tar.FileInfoHeader(info, "")
 		if err != nil {
 			return err
 		}
 		header.Name = relPath
+		header.Format = tar.FormatPAX
 
 		if err := tarWriter.WriteHeader(header); err != nil {
 			return err
@@ -88,4 +89,61 @@ func createBackupTar(src, dest string) error {
 
 		return nil
 	})
+}
+
+func RestoreBackup(path string, directory string) error {
+	in, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	decoder, err := zstd.NewReader(in)
+	if err != nil {
+		return err
+	}
+	defer decoder.Close()
+
+	tarReader := tar.NewReader(decoder)
+
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		// skip backups folder to not overwrite it
+		if header.Name == "backups" || strings.HasPrefix(header.Name, "backups"+string(os.PathSeparator)) {
+			continue
+		}
+
+		targetPath := filepath.Join(directory, header.Name)
+
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(targetPath, os.FileMode(header.Mode)); err != nil {
+				return err
+			}
+		case tar.TypeReg:
+			file, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
+			if err != nil {
+				return err
+			}
+
+			_, err = io.Copy(file, tarReader)
+			if err != nil {
+				return err
+			}
+
+			err = file.Close()
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }

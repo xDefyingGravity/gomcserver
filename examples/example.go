@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	myServer := gomcserver.NewServer("my_server", "1.21.5")
+	myServer := gomcserver.NewServer("my_server", "1.21.7")
 	myServer.AcceptEULA()
 
 	_, pw := io.Pipe()
@@ -20,11 +20,17 @@ func main() {
 		return
 	}
 
-	if err := myServer.SetEventListener("playerJoin", func(output string, newCount int) {
-		fmt.Println("[player join] " + output)
+	if err := myServer.SetEventListener("playerJoin", func(playerName string, newCount int) {
+		fmt.Println("[player join] " + playerName)
 	}); err != nil {
 		fmt.Println("[error] failed to set playerJoin listener:", err)
 		return
+	}
+
+	if err := myServer.SetEventListener("playerLeave", func(playerName string, newCount int) {
+		fmt.Println("[player leave] " + playerName)
+	}); err != nil {
+		fmt.Println("[error] failed to set playerLeave listener:", err)
 	}
 
 	myServer.SetProperty("gamemode", "creative")
@@ -42,13 +48,6 @@ func main() {
 		if !myServer.IsRunning() {
 			fmt.Println("[log] server is not running, exiting...")
 			break
-		}
-
-		if ticks%20 == 0 {
-			err := myServer.Backup(true)
-			if err != nil {
-				return
-			}
 		}
 
 		ticks++

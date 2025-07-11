@@ -314,7 +314,6 @@ func (s *Server) launchProcess(opts *StartOptions) error {
 		defaultJvmOptions := []string{
 			"-XX:+UseG1GC",
 			"-XX:+UnlockExperimentalVMOptions",
-			"-XX:+UseZGC",
 		}
 		opts.JvmOptions = &defaultJvmOptions
 	}
@@ -589,6 +588,20 @@ func (s *Server) Backup(nonBlocking bool) error {
 	err := doBackup()
 	if err != nil {
 		return err
+	}
+	return nil
+}
+
+func (s *Server) RestoreBackup(backupName string) error {
+	backupDir := filepath.Join(s.Directory, "backups")
+	backupPath := filepath.Join(backupDir, backupName)
+
+	if _, err := os.Stat(backupPath); os.IsNotExist(err) {
+		return fmt.Errorf("backup '%s' does not exist", backupName)
+	}
+
+	if err := backup.RestoreBackup(backupPath, s.Directory); err != nil {
+		return fmt.Errorf("failed to restore backup: %w", err)
 	}
 	return nil
 }
