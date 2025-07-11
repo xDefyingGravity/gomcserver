@@ -30,6 +30,7 @@ type Server struct {
 	Props        *properties.Properties
 	EULAAccepted bool
 	PlayerCount  int
+	Players      []string
 
 	stdoutPipe io.Writer
 	stderrPipe io.Writer
@@ -503,12 +504,19 @@ func (s *Server) internalOnStdout(message string) {
 				if s.onPlayerJoin != nil {
 					s.onPlayerJoin(playerName, s.PlayerCount)
 				}
+				s.Players = append(s.Players, playerName)
 			} else if strings.Contains(line, "left the game") {
 				if s.PlayerCount > 0 {
 					s.PlayerCount--
 				}
 				if s.onPlayerLeave != nil {
 					s.onPlayerLeave(playerName, s.PlayerCount)
+				}
+				for i, player := range s.Players {
+					if player == playerName {
+						s.Players = append(s.Players[:i], s.Players[i+1:]...)
+						break
+					}
 				}
 			}
 		}
